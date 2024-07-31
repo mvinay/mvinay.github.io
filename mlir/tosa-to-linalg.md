@@ -1,7 +1,7 @@
 # TOSA to Affine conversion in lastest MLIR(July 2024)
 
 MLIR build instructions:
-```
+```console
 git clone --depth 1 https://github.com/llvm/llvm-project.git
 cd llvm-project
 mkdir -p build
@@ -11,7 +11,7 @@ cmake -G "Ninja" -DCMAKE_BUILD_TYPE="Debug" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_T
 
 TOSA 1D Add example (tosa_add.mlir):
 
-```
+```mlir
 func.func @example(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf32> {
   %0 = tosa.add %arg0, %arg1 : (tensor<128xf32>, tensor<128xf32>) -> tensor<128xf32>
   return %0 : tensor<128xf32>
@@ -20,7 +20,7 @@ func.func @example(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128
 
 MLIR pass pipeline:
 
-```
+```console
 
 <llvm-project>/build/bin/mlir-opt -pass-pipeline="builtin.module(func.func(tosa-to-linalg),
                          one-shot-bufferize{bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map},
@@ -30,7 +30,7 @@ MLIR pass pipeline:
 
 Output for the example (out.mlir):
 
-```
+```mlir
 module {
   func.func @example(%arg0: memref<128xf32>, %arg1: memref<128xf32>) -> memref<128xf32> {
     %alloc = memref.alloc() {alignment = 64 : i64} : memref<128xf32>
