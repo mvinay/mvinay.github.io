@@ -6,9 +6,9 @@ git clone --depth 1 https://github.com/llvm/llvm-project.git
 cd llvm-project
 mkdir -p build
 cd build
-cmake -G "Ninja" -DCMAKE_BUILD_TYPE="Debug" -DLLVM_ENABLE_ASSERTIONS=ON 
-                 -DLLVM_TARGETS_TO_BUILD="Native" ../llvm -DCMAKE_C_COMPILER=clang 
-                 -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_LINKER=lld 
+cmake -G "Ninja" -DCMAKE_BUILD_TYPE="Debug" -DLLVM_ENABLE_ASSERTIONS=ON \
+                 -DLLVM_TARGETS_TO_BUILD="Native" ../llvm -DCMAKE_C_COMPILER=clang \
+                 -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_LINKER=lld \
                  -DLLVM_ENABLE_PROJECTS="mlir" -DLLVM_CCACHE_BUILD=ON
 
 ninja mlir-opt
