@@ -11,7 +11,7 @@ cmake -G "Ninja" -DCMAKE_BUILD_TYPE="Debug" -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_T
 
 TOSA 1D Add example (tosa_add.mlir):
 
-```llvm
+```
 func.func @example(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf32> {
   %0 = tosa.add %arg0, %arg1 : (tensor<128xf32>, tensor<128xf32>) -> tensor<128xf32>
   return %0 : tensor<128xf32>
@@ -30,7 +30,7 @@ MLIR pass pipeline:
 
 Output for the example (out.mlir):
 
-```llvm
+```
 module {
   func.func @example(%arg0: memref<128xf32>, %arg1: memref<128xf32>) -> memref<128xf32> {
     %alloc = memref.alloc() {alignment = 64 : i64} : memref<128xf32>
