@@ -1,1 +1,4 @@
-## Notes for recording Env setup, LLVM, etc
+## MLIR
+ + [TOSA to Affine conversion](https://github.com/mvinay/mvinay.github.io/blob/main/mlir/tosa-to-linalg.html)
+
+
