@@ -1,4 +1,4 @@
 ## MLIR
- + [TOSA to Affine conversion](./mlir/tosa-to-linalg.md)
+ + [TOSA Lowerings](./mlir/tosa-lowerings.md)
 
 
