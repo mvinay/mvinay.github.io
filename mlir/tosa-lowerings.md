@@ -54,7 +54,7 @@ module {
 TOSA Add example (tosa_add_run.mlir):
 
 ```
-// Function to test the workload
+// Define the workload
 func.func @workload(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf32> {
   %0 = tosa.add %arg0, %arg1 : (tensor<128xf32>, tensor<128xf32>) -> tensor<128xf32>
   return %0 : tensor<128xf32>
