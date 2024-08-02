@@ -1,4 +1,4 @@
-# BUILD-COMPILE-RUN tool for LLVM projects
+# Makefile utility for LLVM projects
 
 Following is a Makefile template for LLVM based project to build, compile and run the llvm tools. Store the below contents to a file named `Makefile`. 
 
@@ -48,7 +48,7 @@ r:
 
 # Clean all the temp files.
 clean:
-	rm -rf $(COMPILE_OUT)) $(PFA_OUT)
+	rm -rf $(COMPILE_OUT) $(PFA_OUT)
 
 ```
 
