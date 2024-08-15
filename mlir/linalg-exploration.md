@@ -440,3 +440,90 @@ There are still inefficiencies in the IR:
 3. Last two loops, i.e., `scf.parallel` and `affine.parallel` can be merged. so,  `alloc_3` can be totally eliminated.
 
 TODO: Find passes, transformations to do the same.
+
+## Use `transform.structured.pack` instead of padding to achieve the same pipeline
+
+The transform module looks as follows:
+
+```
+module attributes {transform.with_named_sequence} {
+  transform.named_sequence @__transform_main(%arg1: !transform.any_op {transform.readonly}) {
+
+    // Select the op to transform
+    %0 = transform.structured.match ops{["linalg.elemwise_binary"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+
+    // Pack the tensor to size of 9x15 with 0.0 as default padding. linalg.generic op will be the output.
+    %1 = transform.structured.pack %0 packed_sizes = [15]
+        : (!transform.any_op) -> (!transform.op<"linalg.generic">)
+    %cast = transform.cast %1 : !transform.op<"linalg.generic"> to !transform.any_op
+
+    // Tile the linalg.generic op by the below factor to get scf.forall of size [9,1]
+    %2:2 = transform.structured.tile_using_forall %cast tile_sizes [1, 15]
+           : (!transform.any_op) -> (!transform.any_op, !transform.any_op)
+
+    // Vectorize the linalg.generic and replace it by arith.addf for type vector<1x15xf32>
+    transform.structured.vectorize %2#0 vector_sizes [1, 15] : !transform.any_op
+
+    // Lower the tensor.pack to equivalent tensor operations
+    %pack = transform.structured.match ops{["tensor.pack"]} in %arg1
+      : (!transform.any_op) -> !transform.op<"tensor.pack">
+    transform.structured.lower_pack %pack : (!transform.op<"tensor.pack">)
+      -> (!transform.op<"tensor.pad">, !transform.op<"tensor.expand_shape">, !transform.op<"linalg.transpose">)
+
+    // Lower the unpack operation to equivalent tensor operations
+    %unpack = transform.structured.match ops{["tensor.unpack"]} in %arg1
+      : (!transform.any_op) -> !transform.op<"tensor.unpack">
+    transform.structured.lower_unpack %unpack : (!transform.op<"tensor.unpack">)
+      -> (!transform.op<"tensor.empty">,
+          !transform.op<"linalg.transpose">,
+          !transform.op<"tensor.collapse_shape">,
+          !transform.op<"tensor.extract_slice">)
+    transform.yield
+  }
+}
+```
+
+Resulting module after applying `mlir-opt -transform-interpreter -canonicalize -cse` is:
+
+```
+  func.func @workload(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf32> {
+    %c0 = arith.constant 0 : index
+    %cst = arith.constant 0.000000e+00 : f32
+    %0 = tensor.empty() : tensor<128xf32>
+    %padded = tensor.pad %arg0 low[0] high[7] {
+    ^bb0(%arg2: index):
+      tensor.yield %cst : f32
+    } : tensor<128xf32> to tensor<135xf32>
+    %expanded = tensor.expand_shape %padded [[0, 1]] output_shape [9, 15] : tensor<135xf32> into tensor<9x15xf32>
+    %padded_0 = tensor.pad %arg1 low[0] high[7] {
+    ^bb0(%arg2: index):
+      tensor.yield %cst : f32
+    } : tensor<128xf32> to tensor<135xf32>
+    %expanded_1 = tensor.expand_shape %padded_0 [[0, 1]] output_shape [9, 15] : tensor<135xf32> into tensor<9x15xf32>
+    %padded_2 = tensor.pad %0 low[0] high[7] {
+    ^bb0(%arg2: index):
+      tensor.yield %cst : f32
+    } : tensor<128xf32> to tensor<135xf32>
+    %expanded_3 = tensor.expand_shape %padded_2 [[0, 1]] output_shape [9, 15] : tensor<135xf32> into tensor<9x15xf32>
+    %1 = scf.forall (%arg2) in (9) shared_outs(%arg3 = %expanded_3) -> (tensor<9x15xf32>) {
+      %extracted_slice_4 = tensor.extract_slice %expanded[%arg2, 0] [1, 15] [1, 1] : tensor<9x15xf32> to tensor<1x15xf32>
+      %extracted_slice_5 = tensor.extract_slice %expanded_1[%arg2, 0] [1, 15] [1, 1] : tensor<9x15xf32> to tensor<1x15xf32>
+      %extracted_slice_6 = tensor.extract_slice %arg3[%arg2, 0] [1, 15] [1, 1] : tensor<9x15xf32> to tensor<1x15xf32>
+      %3 = vector.transfer_read %extracted_slice_4[%c0, %c0], %cst {in_bounds = [true, true]} : tensor<1x15xf32>, vector<1x15xf32>
+      %4 = vector.transfer_read %extracted_slice_5[%c0, %c0], %cst {in_bounds = [true, true]} : tensor<1x15xf32>, vector<1x15xf32>
+      %5 = arith.addf %3, %4 : vector<1x15xf32>
+      %6 = vector.transfer_write %5, %extracted_slice_6[%c0, %c0] {in_bounds = [true, true]} : vector<1x15xf32>, tensor<1x15xf32>
+      scf.forall.in_parallel {
+        tensor.parallel_insert_slice %6 into %arg3[%arg2, 0] [1, 15] [1, 1] : tensor<1x15xf32> into tensor<9x15xf32>
+      }
+    }
+    %collapsed = tensor.collapse_shape %1 [[0, 1]] : tensor<9x15xf32> into tensor<135xf32>
+    %extracted_slice = tensor.extract_slice %collapsed[0] [128] [1] : tensor<135xf32> to tensor<128xf32>
+    %2 = linalg.copy ins(%extracted_slice : tensor<128xf32>) outs(%0 : tensor<128xf32>) -> tensor<128xf32>
+    return %2 : tensor<128xf32>
+  }
+```
+
+Note that the IR looks similar to the `transform.structured.pad` variant except for the vector operation dimensions (`vector<1x15xf32> vs. vector<15xf32>`). You can also see the `memref.expand_shape` and `memref.collapse_shape` operations in this variant.
+
+The output after the `affine-parallelize` pass also looks very similar except for the above mentioned differences.
